@@ -1,0 +1,242 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+	<title>POC3</title>
+	<style>
+		body {
+			margin: 0;
+			padding: 0;
+			background-color: #14688f;
+		}
+		textarea,
+		pre {
+			-moz-tab-size : 4;
+			  -o-tab-size : 4;
+				 tab-size : 4;
+		}
+	</style>
+	<script src="js/7.0.4/pixi.js"></script>
+	<script src="js/soundmanager2-nodebug-jsmin.js"></script>
+
+
+
+
+</head>
+<body >
+
+	<script>
+	
+	var AirplaneEngineSnd;
+
+	soundManager.setup({
+	  // where to find flash audio SWFs, as needed
+	  url: 'snd/',
+	  onready: function() {
+		// SM2 is ready to play audio!
+		AirplaneEngineSnd = soundManager.createSound({		id : 'AirplaneEngine', url: 'snd/short-airplane.mp3',	volume: 20, onfinish:function() { 
+                             soundManager.play('AirplaneEngine'); 
+							}                      
+		});	
+	  }
+	});
+
+	var GameSndManager = new Object();
+	GameSndManager.SoundIDs = new Array();
+	
+	GameSndManager.play = function (id, options) {
+		if (GameSndManager.SoundIDs[id] && GameSndManager.SoundIDs[id].playing) return;
+
+		if (!GameSndManager.SoundIDs[id]) GameSndManager.SoundIDs[id] = new Object();
+
+		var SndObj = GameSndManager.SoundIDs[id];
+
+		SndObj.playing = true;
+		SndObj.volume = options.volume;
+		
+		soundManager.play(id, options);
+	}
+	
+	GameSndManager.stop = function (id) {
+		if (GameSndManager.SoundIDs[id] && !GameSndManager.SoundIDs[id].playing) return;
+
+		if (!GameSndManager.SoundIDs[id]) GameSndManager.SoundIDs[id] = new Object();
+		GameSndManager.SoundIDs[id].playing = false;
+		soundManager.stop(id);
+	}
+	
+	GameSndManager.setVolume = function (id, value) {
+		if (GameSndManager.SoundIDs[id] && GameSndManager.SoundIDs[id].volume==value) return;
+			
+		if (!GameSndManager.SoundIDs[id]) GameSndManager.SoundIDs[id] = new Object();
+		GameSndManager.SoundIDs[id].volume = value;
+		soundManager.setVolume(id, value);
+	}
+
+	GameSndManager.rampVolume = function (id, targetvalue, incr) {
+		if (GameSndManager.SoundIDs[id] && GameSndManager.SoundIDs[id].volume==targetvalue) return;
+			
+		var SndObj = GameSndManager.SoundIDs[id];
+		
+		if (!SndObj) return;
+		
+		if (targetvalue<SndObj.volume) {
+			SndObj.volume -= Math.abs(incr);
+			if (SndObj.volume < targetvalue)
+				SndObj.volume = targetvalue;
+		} else {
+			SndObj.volume += incr;
+			if (SndObj.volume > targetvalue)
+				SndObj.volume = targetvalue;
+		}
+		
+		soundManager.setVolume(id, SndObj.volume);
+	}
+
+
+const app = new PIXI.Application({ background: '#1099bb' });
+document.body.appendChild(app.view);
+
+const container = new PIXI.Container();
+
+app.stage.addChild(container);
+
+var Lastairplane;
+var gTrackingSpotlight = false;
+
+// Create a new texture
+const texture = PIXI.Texture.from('assets/airplane.png');
+
+// Create a 5x5 grid of bunnies
+for (let i = 0; i < 1; i++) {
+    const airplane = new PIXI.Sprite(texture);
+    airplane.anchor.set(0.5);
+    airplane.x = (i % 5) * 40;
+    airplane.y = Math.floor(i / 5) * 40;
+	airplane.scale.x = 0.4;
+	airplane.scale.y = 0.4;
+    container.addChild(airplane);
+	
+	Lastairplane = airplane;
+}
+
+
+
+	var energybar = new PIXI.Graphics();
+
+	energybar.beginFill(0xffffff);
+	energybar.drawRect(40, -35, 30, 5); // drawRect(x, y, width, height)
+	energybar.endFill();
+	energybar.alpha = 0.7;
+	energybar.Energy = 1;
+	energybar.tint = 0x22ff33;
+
+	container.addChild(energybar);
+	
+	var Spotlight = new PIXI.Graphics()
+	
+	Spotlight.Radius = 120;
+	Spotlight.beginFill(0xffffff); 
+	Spotlight.drawCircle(0, 0, Spotlight.Radius); 
+	Spotlight.endFill();
+	
+	Spotlight.alpha = 0.2;
+	
+	app.stage.addChild(Spotlight);
+
+// Move container to the center
+container.x = app.screen.width / 2;
+container.y = app.screen.height / 2;
+
+
+//console.log(container.width);
+//console.log(container.height);
+// Center airplane sprite in local container coordinates
+container.pivot.x = 0;//container.width / 2;
+container.pivot.y = 0;//container.height / 2;
+
+//container.x = 0;
+//container.y = 0;
+
+/*
+console.log(Lastairplane.width);
+console.log(Lastairplane.height);
+console.log(container.width);
+console.log(container.height);
+*/
+
+var bFirstTime = true;
+
+// Listen for animate update
+app.ticker.add((delta) => {
+    // rotate the container!
+    // use delta to create frame-independent transform
+
+	
+	if (energybar.Energy>0) {
+		energybar.Energy-= 0.001;
+		if (energybar.Energy<0.5) {
+			energybar.tint = (energybar.Energy<0.20) ? 0xff0000 : 0xffff00;
+		}
+		energybar.scale.x = energybar.Energy;
+
+		Lastairplane.rotation -= 0.01 * delta;
+		container.position.x += 0.1;
+	} else
+		GameSndManager.stop('AirplaneEngine');	
+	
+	if (gTrackingSpotlight) {
+		Spotlight.position.x = cursor_x;
+		Spotlight.position.y = cursor_y;
+	} else {
+		Spotlight.position.x = -100;
+		Spotlight.position.y = -100;
+	}
+	
+//	console.log(Math.abs(container.position.x - cursor_x))
+	
+	if (Math.abs(container.position.x - cursor_x)<Spotlight.Radius && 
+		Math.abs(container.position.y - cursor_y)<Spotlight.Radius) {
+		GameSndManager.rampVolume('AirplaneEngine', 100, 2.5);		
+		Spotlight.tint = 0x00ff00;
+	} else {
+		Spotlight.tint = 0xffffff;
+		GameSndManager.rampVolume('AirplaneEngine', 5, 2.5);
+	}
+});
+
+
+function checkme(a,b) {
+        var ab = a.getBounds();
+        var bb = b.getBounds();
+        return ab.x + ab.width > bb.x && ab.x < bb.x + bb.width && ab.y + ab.height > bb.y && ab.y < bb.y + bb.height;
+}
+
+var cursor_x = -1;
+var cursor_y = -1;
+
+document.onmousemove = function(event)
+{
+	cursor_x = event.pageX;
+	cursor_y = event.pageY;
+}
+
+document.onclick = function (event)
+{
+	gTrackingSpotlight = (document.body.style.cursor!='none');
+	
+	document.body.style.cursor = (gTrackingSpotlight) ? 'none' : 'default';
+
+	if (bFirstTime) {
+		bFirstTime = false;
+		GameSndManager.play('AirplaneEngine', {volume:5});
+	}
+}
+
+function GetMouse()
+{
+    return { X : cursor_x, Y: cursor_y};
+}
+	
+</script>
+</body>
+</html>

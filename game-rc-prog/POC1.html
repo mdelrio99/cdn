@@ -1,0 +1,161 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+	<title>Now with Scripting!</title>
+	<style>
+		body {
+			margin: 0;
+			padding: 0;
+			background-color: #14688f;
+		}
+		textarea,
+		pre {
+			-moz-tab-size : 4;
+			  -o-tab-size : 4;
+				 tab-size : 4;
+		}
+	</style>
+	<script src="js/7.0.4/pixi.js"></script>
+	<script src="js/soundmanager2.js"></script>
+
+
+
+
+</head>
+<body >
+
+	<script>
+
+const app = new PIXI.Application({ background: '#1099bb' });
+document.body.appendChild(app.view);
+
+const container = new PIXI.Container();
+
+app.stage.addChild(container);
+
+var LastBunny;
+var gTrackingSpotlight = false;
+
+// Create a new texture
+const texture = PIXI.Texture.from('assets/bunny.png');
+
+// Create a 5x5 grid of bunnies
+for (let i = 0; i < 1; i++) {
+    const bunny = new PIXI.Sprite(texture);
+    bunny.anchor.set(0.5);
+    bunny.x = (i % 5) * 40;
+    bunny.y = Math.floor(i / 5) * 40;
+    container.addChild(bunny);
+	
+	LastBunny = bunny;
+}
+
+
+
+	var energybar = new PIXI.Graphics();
+
+	energybar.beginFill(0xffffff);
+	energybar.drawRect(10, -25, 30, 5); // drawRect(x, y, width, height)
+	energybar.endFill();
+	energybar.alpha = 0.7;
+	energybar.Energy = 1;
+	energybar.tint = 0x22ff33;
+
+	container.addChild(energybar);
+	
+	var Spotlight = new PIXI.Graphics()
+	
+	Spotlight.Radius = 120;
+	Spotlight.beginFill(0xffffff); 
+	Spotlight.drawCircle(0, 0, Spotlight.Radius); 
+	Spotlight.endFill();
+	
+	Spotlight.alpha = 0.2;
+	
+	app.stage.addChild(Spotlight);
+
+// Move container to the center
+container.x = app.screen.width / 2;
+container.y = app.screen.height / 2;
+
+
+//console.log(container.width);
+//console.log(container.height);
+// Center bunny sprite in local container coordinates
+container.pivot.x = 0;//container.width / 2;
+container.pivot.y = 0;//container.height / 2;
+
+//container.x = 0;
+//container.y = 0;
+
+/*
+console.log(LastBunny.width);
+console.log(LastBunny.height);
+console.log(container.width);
+console.log(container.height);
+*/
+
+// Listen for animate update
+app.ticker.add((delta) => {
+    // rotate the container!
+    // use delta to create frame-independent transform
+	
+	if (energybar.Energy>0) {
+		energybar.Energy-= 0.001;
+		if (energybar.Energy<0.5) {
+			energybar.tint = (energybar.Energy<0.20) ? 0xff0000 : 0xffff00;
+		}
+		energybar.scale.x = energybar.Energy;
+
+		LastBunny.rotation -= 0.01 * delta;
+		container.position.x += 0.1;
+	}
+	
+	if (gTrackingSpotlight) {
+		Spotlight.position.x = cursor_x;
+		Spotlight.position.y = cursor_y;
+	} else {
+		Spotlight.position.x = -100;
+		Spotlight.position.y = -100;
+	}
+	
+//	console.log(Math.abs(container.position.x - cursor_x))
+	
+	if (Math.abs(container.position.x - cursor_x)<Spotlight.Radius && 
+		Math.abs(container.position.y - cursor_y)<Spotlight.Radius)
+		Spotlight.tint = 0x00ff00;
+	else
+		Spotlight.tint = 0xffffff;
+});
+
+
+function checkme(a,b) {
+        var ab = a.getBounds();
+        var bb = b.getBounds();
+        return ab.x + ab.width > bb.x && ab.x < bb.x + bb.width && ab.y + ab.height > bb.y && ab.y < bb.y + bb.height;
+}
+
+var cursor_x = -1;
+var cursor_y = -1;
+
+document.onmousemove = function(event)
+{
+	cursor_x = event.pageX;
+	cursor_y = event.pageY;
+}
+
+document.onclick = function (event)
+{
+	gTrackingSpotlight = (document.body.style.cursor!='none');
+	
+	document.body.style.cursor = (gTrackingSpotlight) ? 'none' : 'default';
+}
+
+function GetMouse()
+{
+    return { X : cursor_x, Y: cursor_y};
+}
+	
+</script>
+</body>
+</html>

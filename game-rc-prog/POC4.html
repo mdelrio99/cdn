@@ -1,0 +1,1180 @@
+
+<!DOCTYPE HTML>
+<html>
+<head>
+	<title>POC4!</title>
+	<style>
+		body {
+			margin: 0;
+			padding: 0;
+			background-color: #14688f;
+		}
+		textarea,
+		pre {
+			-moz-tab-size : 4;
+			  -o-tab-size : 4;
+				 tab-size : 4;
+		}
+	</style>
+	<script src="js/7.0.4/pixi.js"></script>
+	<script src="js/soundmanager2.js"></script>
+	<script src="js/SndMngrWrapper.js"></script>
+
+
+</head>
+<body onkeydown="javascript:key(event);">
+
+	<script>
+//https://www.youtube.com/watch?v=5ggHKNa9-pY	Tiny basic
+	
+var gunFireObj, 
+	ShotObj,
+	CrashSound;
+	
+	var Spotlight = new PIXI.Graphics()
+	var bFirstTime = true;
+
+	var soundManager;	
+	var bQuiet = false;
+	
+	var AirplaneEngineSnd;
+	
+	soundManager.setup({
+	  // where to find flash audio SWFs, as needed
+	  url: 'snd/',
+	  onready: function() {
+		// SM2 is ready to play audio!
+		gunFireObj = soundManager.createSound({		url: 'snd/GUN_FIRE-GoodSoundForYou-820112263.mp3',	volume: 20		});	
+		ShotObj = soundManager.createSound({		url: 'snd/rat_upset.mp3', volume: 20});
+		CrashSound = soundManager.createSound({		url: 'snd/crashsound.mp3', volume: 80});		
+		AirplaneEngineSnd = soundManager.createSound({		id : 'AirplaneEngine', url: 'snd/short-airplane.mp3',	volume: 20, onfinish:function() { 
+                             soundManager.play('AirplaneEngine'); 
+							}})
+		}
+	});
+
+	
+var DarkSmokeImage = "assets/darksmoke.png"
+var WhiteSmokeImage = "assets/whitepuff.png"
+
+var MaxBullets = 20; //70	
+
+const app = new PIXI.Application({ background: '#14688f' });
+document.body.appendChild(app.view);
+
+
+//const container = new PIXI.Container();
+
+var airplane, player_tank;
+var airplaneContainer,
+	playerContainer;
+
+var AmmoList = new Array();
+
+var gActiveID = 0;
+
+var gStopGame = false;
+var gTrackingSpotlight = false;
+
+var Sprites = new Array();
+var SpriteContainers = new Array();
+var Enemies = new Array();
+var SmokeOntheField = new Array();
+	
+//--------------------------------------------------------------------------------------------------------------------------------
+														setTimeout( () => { StartGame() }, 20);
+//--------------------------------------------------------------------------------------------------------------------------------
+
+var StatisticsText;
+
+
+
+function GameLoop(delta)
+{
+//	console.log(delta);
+//	document.getElementById("RawCode").innerHTML = delta;
+	
+	gticks++;
+	
+	if (gStopGame) return;
+	
+
+	if (airplaneContainer.energybar.Energy>0) {
+		airplaneContainer.energybar.Energy-= 0.0001;
+		if (airplaneContainer.energybar.Energy<0.5) {
+			airplaneContainer.energybar.tint = (airplaneContainer.energybar.Energy<0.20) ? 0xff0000 : 0xffff00;
+		}
+		airplaneContainer.energybar.scale.x = airplaneContainer.energybar.Energy;
+
+//		Lastairplane.rotation -= 0.01 * delta;
+		airplane.rotation -= 0.0035 * delta;		
+		
+		var Deltas = GetXYVelocityFromDirection(airplane.rotation);
+		airplaneContainer.position.x += Deltas.x;
+		airplaneContainer.position.y += Deltas.y;
+	} else
+		GameSndManager.stop('AirplaneEngine');	
+
+
+	if (gTrackingSpotlight) {
+		Spotlight.position.x = cursor_x;
+		Spotlight.position.y = cursor_y;
+	} else {
+		Spotlight.position.x = -100;
+		Spotlight.position.y = -100;
+	}
+
+	
+	for (i=0; i<SmokeOntheField.length; i++) {
+		var smoke = SmokeOntheField[i];
+		
+		UpdateSmoke(smoke);
+		if (smoke.alpha<=0.0) {
+			app.stage.removeChild(smoke);
+			SmokeOntheField.splice(i, 1);
+			i--;
+		}
+	}
+	
+	for (var i = 0; i < AmmoList.length; i++) {
+		var Ammo = AmmoList[i];
+		
+		var DistanceToObj = ComputeRealDistance(playerContainer.position, Ammo.position);
+		if (Ammo.radius + player_tank.radius>DistanceToObj && 0) {		
+			{
+				if (!bQuiet) CrashSound.play();
+				var R1 = playerContainer.position;
+				var R2 = Ammo.position;
+				var position = {x : (R1.x + R2.x)/2, y: (R1.y + R2.y)/2 };
+				
+				smoke = NewSmoke(null, position, null, false, false);
+				smoke.bExplosion = false;
+//				smoke.tint = QuickTint(255, 255, 255);
+				var smokescale = 0.8 + RandomFloat(0.5);
+				smoke.scale.x = smokescale;
+				smoke.scale.y = smokescale;
+				smoke.alpha = 0.5;
+				smoke.scaleamount = 1.02;
+			}
+			
+			app.stage.removeChild(Ammo);
+			AmmoList.splice(i, 1);
+			i--;
+		} else {
+		
+			Ammo.rotation += 0.2;
+			Ammo.position.x += Ammo.Velx;
+			Ammo.position.y += Ammo.Vely;
+			Ammo.life--;
+			
+			Ammo.alpha += Ammo.alphaChange;
+			
+			if (!Ammo.life || !Ammo.alpha) {
+				app.stage.removeChild(Ammo);
+				AmmoList.splice(i, 1);
+				i--;
+			}
+		}
+	}
+
+	if (window.Player_Sprite_0) {
+		var funcs = new Array();
+		
+		for (var i = 0; i< SpriteContainers.length; i++) 
+			funcs.push("Player_Sprite_" + i + "(SpriteContainers[" + i + "])");
+		
+		geval(funcs.join(), ";");		
+	}
+	
+
+
+//SPOTLIGHT
+
+	if (Math.abs(airplaneContainer.position.x - cursor_x)<Spotlight.Radius && 
+		Math.abs(airplaneContainer.position.y - cursor_y)<Spotlight.Radius && gTrackingSpotlight) {
+		GameSndManager.rampVolume('AirplaneEngine', 100, 2.5);		
+		Spotlight.tint = 0x00ff00;
+	} else {
+		Spotlight.tint = 0xffffff;
+		GameSndManager.rampVolume('AirplaneEngine', 5, 2.5);
+	}
+
+
+
+	return;
+	//fuck
+	
+
+//		player_tank.rotation += 0.005;
+	
+	for (var i = 0; i<airplane.weapons.length; i++) {
+		airplane.weapons[i].rotation += -0.005;	
+		airplane.weapons[i].rotation %=TwoPi;
+	}
+		
+	for (var i = 0; i<player_tank.weapons.length; i++) {
+		player_tank.weapons[i].rotation += 0.001;
+		player_tank.weapons[i].rotation %= TwoPi;
+	}
+		
+
+/*	if (!airplane.CountDownBeforeTurn) {
+		airplane.rotation += 0.005;
+	} else {
+		airplane.CountDownBeforeTurn--;
+	}*/
+	
+}
+
+
+
+function StartGame()
+{
+	var i, j, filmstrip;
+
+	LoadPageStuff();
+	
+//	app.stage.addChild(container);
+	
+//	app.stage.interactive = true;
+
+
+	var ScoreText = new PIXI.Text("Score: 0", {fontFamily: 'Arial',  fontSize: 12, fill: ['#ffffff', '#ffffff']});
+	ScoreText.position.x = 10;
+	ScoreText.position.y = 30;
+
+	app.stage.addChild(ScoreText);
+	
+	StatisticsText = new PIXI.Text("", {fontFamily: 'Arial',  fontSize: 9, fill: ['#ffffff', '#00ff99']});
+	StatisticsText.position.x = app.screen.width-30;
+	StatisticsText.position.y = 30;
+
+	app.stage.addChild(StatisticsText);
+
+
+
+	{
+		player_tank = SpriteFromTexture('assets/tank2.png');
+		
+		player_tank.anchor.set(0.5);
+		player_tank.x = 0;//app.screen.width * 0.5;
+		player_tank.y = 0;//app.screen.height * 0.5;
+		player_tank.scale.x = 0.5
+		player_tank.scale.y = 0.5
+		player_tank.interactive = true;
+		player_tank.ID = 0;
+		player_tank.name = 'player_tank';
+		
+		Sprites.push(player_tank);
+
+		
+//		container.addChild(player_tank);
+		app.stage.addChild(player_tank);
+
+		player_tank.on('pointerdown', (event) => { 
+			gActiveID = player_tank.ID 
+		
+			document.getElementById("RawCode").value = LoadSpriteCode( player_tank.ID ); 
+		});
+		
+	}
+
+	{
+		var Gun = SpriteFromTexture('assets/cannon2.png')
+		
+		Gun.anchor.x = 0.5;
+		Gun.anchor.y = 0.8;
+		Gun.position.x = 0;
+		Gun.position.y = -0;
+		Gun.rotation = 0;
+		Gun.name = 'cannon';
+		Gun.WeaponLaunchMultiplier = 27;
+		
+		player_tank.addChild(Gun);
+		player_tank.weapons = new Array();
+		player_tank.weapons.push(Gun);
+
+		player_tank.Gun = Gun;
+		player_tank.radius = 100/2;
+	}
+	
+	{
+		airplane = SpriteFromTexture('assets/airplane.png');
+		airplane.anchor.set(0.5);
+		airplane.x = 0;//app.screen.width * 0.8;
+		airplane.y = 0;//app.screen.height * 0.5;
+		airplane.scale.x = 0.3
+		airplane.scale.y = 0.3
+		airplane.interactive = true;
+		airplane.ID = 1;
+		airplane.state = 'Main';
+		airplane.name = 'airplane 1';
+		airplane.radius = 80/2;
+
+		airplaneContainer = new PIXI.Container();
+		airplaneContainer.x = app.screen.width * 0.8;
+		airplaneContainer.y = app.screen.height * 0.5;
+
+		airplaneContainer.addChild(airplane);
+		
+		airplaneContainer.energybar = new PIXI.Graphics();
+
+		airplaneContainer.energybar.beginFill(0xffffff);
+		airplaneContainer.energybar.drawRect(25, -35, 30, 5); // drawRect(x, y, width, height)
+		airplaneContainer.energybar.endFill();
+		airplaneContainer.energybar.alpha = 0.7;
+		airplaneContainer.energybar.Energy = 1;
+		airplaneContainer.energybar.tint = 0x22ff33;
+
+		airplaneContainer.addChild(airplaneContainer.energybar);
+		
+		airplaneContainer.sprite = airplane;
+		airplane.container = airplaneContainer;
+		
+		Enemies.push(airplaneContainer);
+			
+		app.stage.addChild(airplaneContainer);
+
+//-------------------------------------------------------------------------------------------------
+		playerContainer = new PIXI.Container();
+		playerContainer.x = app.screen.width * 0.5;
+		playerContainer.y = app.screen.height * 0.5;
+
+		playerContainer.addChild(player_tank);
+		playerContainer.sprite = player_tank;
+		player_tank.container = playerContainer;
+
+		playerContainer.state = 'Main';
+	
+		playerContainer.energybar = new PIXI.Graphics();
+
+		playerContainer.energybar.beginFill(0xffffff);
+		playerContainer.energybar.drawRect(25, -35, 30, 5); // drawRect(x, y, width, height)
+		playerContainer.energybar.endFill();
+		playerContainer.energybar.alpha = 0.7;
+		playerContainer.energybar.Energy = 1;
+		playerContainer.energybar.tint = 0x22ff33;
+
+		playerContainer.weaponLookup = new Array();
+		playerContainer.weaponLookup[Gun.name] = Gun;
+
+		playerContainer.addChild(playerContainer.energybar);
+
+		SpriteContainers.push(playerContainer);
+
+		app.stage.addChild(playerContainer);
+		
+
+	}
+
+	{
+		var minigun = SpriteFromTexture('assets/minigun.png');
+
+		minigun.position.x = -2;
+		minigun.position.y = -40;
+		minigun.anchor.x = 0.5;
+		minigun.anchor.y = 0.8;
+		minigun.scale.x = 1.2;
+		minigun.scale.y = 1.2;
+		minigun.name = 'minigun';
+		minigun.rotation = -1.1;
+		minigun.WeaponLaunchMultiplier = 12;
+		
+		airplane.addChild(minigun);
+		airplane.Gun = minigun;
+		airplane.weapons = new Array();
+		airplane.weapons.push(minigun);
+
+
+		airplaneContainer.weaponLookup = new Array();
+		airplaneContainer.weaponLookup[minigun.name] = minigun;
+	}
+	
+	
+	
+	
+	Spotlight.Radius = 120;
+	Spotlight.beginFill(0xffffff); 
+	Spotlight.drawCircle(0, 0, Spotlight.Radius); 
+	Spotlight.endFill();
+	
+	Spotlight.alpha = 0.2;
+	
+	app.stage.addChild(Spotlight);
+	
+
+	if (0)
+	{
+		var diamond = SpriteFromTexture('assets/diamond.png');
+		
+		diamond.anchor.set(0.5);
+		diamond.x = 330;
+		diamond.y = 340;
+		diamond.scale.x = 0.5
+		diamond.scale.y = 0.5
+		
+		diamond.Velx = 1;
+		diamond.Vely = -0.5;
+		diamond.life = 400;
+		diamond.alphaChange = -0.002;
+
+		app.stage.addChild(diamond);
+		
+		AmmoList.push(diamond);
+	}
+	
+
+
+	// Move container to the center
+//	container.x = app.screen.width / 2;
+//	container.y = app.screen.height / 2;
+
+	// Center bunny sprite in local container coordinates
+//	container.pivot.x = container.width / 2;
+//	container.pivot.y = container.height / 2;
+
+
+	// Listen for animate update
+	app.ticker.add((delta) => {
+		GameLoop(delta);
+	});
+	
+	setInterval(() => {
+		StatisticsText.text = gticks + ' fps';
+		gticks = 0;
+		
+	}, 1000	);
+
+	setInterval(() => {
+		FireGun(airplaneContainer, 'minigun');
+	}, 10 );
+
+/*	setInterval(() => {
+		FireGun(player_tank, 'cannon');
+	}, 350 );
+*/
+	
+}	
+
+function stop()
+{
+	gStopGame = true
+	GameSndManager.stop('AirplaneEngine');	
+}
+
+function go()
+{
+	gStopGame = false
+}
+
+var a,m,t,c;
+
+function stats()
+{
+	//--fuck
+/*
+	console.log('airplane:' + airplane.rotatio)
+	console.log('minigun:' + airplane.weaponLookup['minigun'].rotatio)
+	console.log('airplane.Gun:' + airplane.Gun.rotatio);
+	console.log('combined:' + (airplane.rotatio + airplane.weaponLookup['minigun'].rotatio))
+	console.log('mod 2Pi:' + (airplane.rotatio + airplane.weaponLookup['minigun'].rotatio) % TwoPi)
+	console.log('----');
+	console.log('tank:' + player_tank.rotatio)
+	console.log('cannon:' + player_tank.weaponLookup['cannon'].rotatio)
+	console.log('combined:' + (player_tank.rotatio + player_tank.weaponLookup['cannon'].rotatio))
+	console.log('mod 2Pi:' + (player_tank.rotatio + player_tank.weaponLookup['cannon'].rotatio) % TwoPi)
+	console.log('----');
+*/	
+	a = airplane;
+	m = airplane.weaponLookup['minigun'];
+	t = player_tank;
+	c = player_tank.weaponLookup['cannon'];
+}
+
+function SpriteFromTexture(asset_path)
+{
+	const texture = PIXI.Texture.from(asset_path);
+	return  new PIXI.Sprite(texture);
+}
+
+
+function LoadPageStuff()
+{
+	var f = function(e) {
+	  if (e.key == 'Tab') {
+		e.preventDefault();
+		var start = this.selectionStart;
+		var end = this.selectionEnd;
+
+		// set textarea value to: text before caret + tab + text after caret
+		this.value = this.value.substring(0, start) +
+		  "\t" + this.value.substring(end);
+
+		// put caret at right position again
+		this.selectionStart =
+		  this.selectionEnd = start + 1;
+		  
+	  }
+	  e.cancelBubble = true;
+	}
+	
+	document.getElementById('RawCode').addEventListener('keydown', f);
+	document.getElementById('ProcessedCode').addEventListener('keydown', f);
+}
+
+
+var gticks = 0;
+
+let TwoPi = Math.PI*2;
+
+
+function NewSmoke(Gun, position, Deltas, bUseDarkSmoke, bExplosion)
+{
+	var texturePath, Smoke;
+	
+	if (bUseDarkSmoke) {
+		texturePath = DarkSmokeImage;
+	} else
+		texturePath = (Gun && Gun.bDarkSmoke) ? DarkSmokeImage : WhiteSmokeImage;
+		
+	Smoke = SpriteFromTexture(texturePath)
+
+	if (Deltas && !bExplosion) {
+		Smoke.position.x = position.x + Deltas.x * 10;
+		Smoke.position.y = position.y + Deltas.y * 10;
+	} else {
+		Smoke.position.x = position.x;
+		Smoke.position.y = position.y;
+	}
+	Smoke.anchor.x = 0.5;
+	Smoke.anchor.y = 0.5;
+	Smoke.scale.x = 0.07;
+	Smoke.scale.y = 0.07;
+	Smoke.rotation = RandomFloat(Math.PI);
+	Smoke.alpha = (Gun && Gun.bDarkSmoke) ? 0.75 : 0.60;
+	if (Gun && Gun.smokealpha)
+		Smoke.alpha = Gun.smokealpha;
+		
+	Smoke.direction = Deltas;	
+	Smoke.scaleamount = 1.12;
+	Smoke.alphaChange = -0.01;
+	Smoke.rotationAmount = -RandomFloat(0.03) + 0.015;
+	
+	if (Gun) {
+		Smoke.movement = (Gun.smokemovement) ? Gun.smokemovement : 5;
+	} else {
+		Smoke.movement = 3;
+	}
+	
+//	stage.addChild(Smoke);
+	app.stage.addChild(Smoke);
+	SmokeOntheField.push(Smoke);
+	
+	return Smoke;
+}
+
+
+
+function UpdateSmoke(smoke) {
+	smoke.alpha += smoke.alphaChange;
+	smoke.scale.x *= smoke.scaleamount;
+	smoke.scale.y *= smoke.scaleamount;
+	
+	if (!smoke.bExplosion) {
+		if (smoke.scaleamount>1.01)
+			smoke.scaleamount *= 0.9965;
+	} else {
+		if (smoke.scaleamount>1.01)
+			smoke.scaleamount *= 0.991;
+	}
+	if (smoke.alphaChange>-0.00000001)
+		smoke.alphaChange *= 0.2;
+	
+	if (smoke.direction) {
+		smoke.position.x += smoke.direction.x * smoke.movement;
+		smoke.position.y += smoke.direction.y * smoke.movement;
+	}
+	if (smoke.movement>1)
+		smoke.movement *= 0.971;	//air resistance
+		
+	smoke.rotation += smoke.rotationAmount;
+	
+}	
+
+
+function GetXYVelocityFromDirection(angle)
+{
+	return {x:Math.sin(angle), y:-Math.cos(angle)};
+}
+
+
+function DetermineNewRotationAngle(newHeading, curHeading)
+{
+	if (Math.abs(newHeading - curHeading) < Math.abs(newHeading - (curHeading + TwoPi))) {
+		if (Math.abs(newHeading - curHeading) < Math.abs(newHeading - (curHeading - TwoPi))) {
+			return curHeading;
+		} else {
+			return curHeading - TwoPi;
+		}
+	} else {
+		return curHeading + TwoPi;
+	}
+}
+
+
+function RandomInt(range)
+{
+	return Math.floor(Math.random() * range);
+}
+
+function RandomFloat(range)
+{
+	return (Math.random() * range);
+}
+
+var  gRandIndex = 0;
+
+/*
+function RandomFloat(range)
+{
+	gRandIndex++;
+	if (gRandIndex>=RandomNumbers.length)
+		gRandIndex = 0;
+	return RandomNumbers[gRandIndex] * range;
+}
+*/
+
+/*
+function RandomFloat(range)
+{
+	return RandomNumbers[ range][++gRandIndex & IndexMask ] ;
+}
+*/
+
+
+
+
+document.onmousemove = function(e){
+    cursorX = e.pageX;
+    cursorY = e.pageY;
+	
+}
+
+var gLastBunny = 0, gConsecShots =0, gLastBulletLength;
+var Messages = new Array();
+
+function Message(s, x, y, r, decayRate, scaleChange, color)
+{
+	var Msg, undefined;
+	
+	if (scaleChange==undefined)		scaleChange = 0;
+	if (r==undefined)				r = 0;
+	if (color==undefined)			color = "blue";
+	if (decayRate==undefined)		decayRate = 0.015;
+
+		
+	Msg = new PIXI.Text(s, {font:"bold 32px Arial", fill:color});
+	Msg.anchor.x = 0.5;
+	Msg.anchor.y = 0.5;
+	Msg.position.x = x;
+	Msg.position.y = y;
+	Msg.r = r;
+	Msg.scaleChange = scaleChange;
+	Msg.decayRate = 0.015;
+	
+	stage.addChild(Msg);
+	
+	Messages.push(Msg);
+
+//	console.log(s);
+}
+
+
+document.onmousedown = function(e){
+
+
+}
+
+function key(event)
+{
+
+	if (event.key=='e') {
+		stop();
+		
+		var RawCodeObj = document.getElementById("RawCode");
+		
+//		RawCodeObj.style.position = '';
+		if (RawCodeObj.style.left == '3vw') {
+			RawCodeObj.style.top = '10vh'
+			RawCodeObj.style.left = '10vw'
+			RawCodeObj.style.width = '80vw';
+			RawCodeObj.style.height = '80vh';
+		} else {
+			RawCodeObj.style.top = '70vh'
+			RawCodeObj.style.left = '3vw'
+			RawCodeObj.style.height = "15vh"
+			RawCodeObj.style.width = "23vw"
+		}
+	}
+//	stage.visible = !stage.visible;
+}
+
+	</script>
+	
+	
+	<script>
+	//-----------language stuff--------------//
+	
+	function Indent(Code)
+	{
+		var CodeArr = Code.split("\n");
+		
+		for (var i = 0; i<CodeArr.length; i++)
+			CodeArr[i] = '\t' + CodeArr[i];
+			
+		return CodeArr.join("\n");
+	}
+	
+	function GetVariableList(Code)
+	{
+		var EqualList = Code.split("=");
+		
+		for (var i = 0; i<EqualList.length-1; i++) {
+			if (EqualList[0].indexOf("(")>=0)
+				return EqualList[0].split("(")[1];
+			return EqualList[0];
+		}
+		return "__nothing_used";
+	}
+	
+	function ParameterizeWithGameObj(Code)
+	{
+		return 	Code.replace(/Sensor\(/g, "Sensor(GameObj, ")
+					.replace(/AimTank\(/g, "AimTank(GameObj, ")
+					.replace(/AimGun\(/g, "AimGun(GameObj, ")
+					.replace(/IsWithinRange\(/g, "IsWithinRange(GameObj, ")
+					.replace(/FireGun\(/g, "FireGun(GameObj, ")
+					.replace(/Move\(/g, "Move(GameObj, ")
+					.replace("Main:", "\t\tcase 'Main' :")
+					
+	}
+	
+	function DoBusyStuff(GameObj)
+	{
+		if (GameObj.isBusy) {
+			if (GameObj.BusyRotateCycles) {
+				GameObj.BusyRotateCycles--;
+				GameObj.sprite.rotation += GameObj.AutoRotation;
+				if (!GameObj.BusyRotateCycles) 
+					 GameObj.AutoRotation = 0; 
+			}
+			if (GameObj.BusyMoveCycles) {
+				GameObj.BusyMoveCycles--;
+				GameObj.position.x += GameObj.AutoMove.Velx;
+				GameObj.position.y += GameObj.AutoMove.Vely;
+				if (!GameObj.BusyMoveCycles) 
+					GameObj.AutoMove = {Velx : 0, Vely : 0}; 
+			}
+		
+			GameObj.isBusy = !GameObj.BusyRotateCycles && !GameObj.BusyMoveCycles;			
+		}
+		
+		return GameObj.isBusy;
+	}
+	
+	
+	function ProcessCode(AutoSave)
+	{
+		var Code = document.getElementById("RawCode").value.trim();
+		
+		var NewCode = "function Player_Sprite_" + gActiveID + "(GameObj)\n" + 
+				"{\n" 
+				
+		NewCode += Indent("var " + GetVariableList(Code) + ";\n") + "\n";
+		
+		NewCode += "\n\tif (DoBusyStuff(GameObj)) return;\n"		
+
+		
+//		NewCode += '\n' + '\tconsole.log(GameObj)\n\n';
+		
+		NewCode += '\n' + '\tswitch (GameObj.state) {\n';
+		
+//		NewCode += "console.log('hello');\n";
+		NewCode += Indent(ParameterizeWithGameObj(Code).trim()) + "\n\tbreak;\n"
+		
+		NewCode += '\n\t}\n}\n';
+
+
+		{
+			document.getElementById("ProcessedCodeArea").style.display = "";
+			document.getElementById("ProcessedCode").innerHTML = NewCode;
+		}
+
+		if (AutoSave)
+			SaveSpriteCode(gActiveID, Code);
+	}
+
+
+	function SaveSpriteCode( ID, Code)
+	{
+		localStorage.setItem('Player_Sprite_' + ID, Code);
+		console.log("Saving Code")
+	}
+	
+	
+	function LoadSpriteCode( ID )
+	{
+		return localStorage.getItem('Player_Sprite_' + ID);
+	}
+	
+	
+	function Sensor(GameObj, method, SeekingWhat) 
+	{
+///		console.log("Sensor running..." + method + " " + SeekingWhat);
+		
+		if (SeekingWhat=='enemy')
+			return Enemies[0];
+			
+		if (SeekingWhat=='incoming ammo' && AmmoList.length) { //fuck
+			var BestDist = 1000000.;
+			var BestIndex = 0;
+			var GamePos = GameObj.position;
+			
+			for (var i = 0; i<AmmoList.length; i++) {
+				var ammoPos = AmmoList[i].position;
+				var X = (ammoPos.x - GamePos.x);
+				var X2 = X * X;
+				var Y = (ammoPos.y - GamePos.y);
+				var Y2 = Y * Y;
+				FakeDist = X2 + Y2;
+				if (FakeDist<BestDist) {
+					BestDist = FakeDist;
+					BestIndex = i;
+				}
+			}
+			if (!AmmoList[BestIndex].Distance2)
+				AmmoList[BestIndex].Distance2 = new Array();
+			AmmoList[BestIndex].Distance2[GameObj.sprite.name] = BestDist;//squared
+			
+			return AmmoList[BestIndex];
+		}
+			
+		return 0;
+	}
+	
+	
+	function AimTank(GameObj, direction, ToWhat) 
+	{
+		var XDelta = ToWhat.position.x - GameObj.position.x;
+		var YDelta = - (ToWhat.position.y - GameObj.position.y);
+		
+//		console.log("Aiming Tank..." + direction + " " + ToWhat.sprite.name);
+		
+//		console.log(XDelta + ',' + YDelta);
+		
+		var alpha = Math.atan(YDelta/XDelta);
+		
+		alpha -= TwoPi/4;
+		
+		if (XDelta<0)
+			alpha += TwoPi/2;
+		
+		var CurRotation = GameObj.sprite.rotation;
+		var NewRotation = (TwoPi - alpha) % TwoPi;
+
+//		console.log(alpha);
+//		GameObj.rotation = NewRotation;
+		
+//		GameObj.isBusy = true;
+//		GameObj.BusyCycles = 20;
+//		GameObj.AutoRotation = -0.003;
+
+
+		if (CurRotation<0)
+			CurRotation += TwoPi;
+		if (NewRotation<0)
+			NewRotation += TwoPi;
+			
+		if (Math.abs(NewRotation-CurRotation) <= Math.PI) {
+			if (NewRotation>CurRotation)
+				RotationDelta = 0.013;
+			else
+				RotationDelta = -0.013;
+		} else {
+			if (NewRotation>CurRotation)
+				RotationDelta = -0.013;
+			else
+				RotationDelta = 0.013;
+		}
+		
+		GameObj.sprite.rotation += RotationDelta;
+		GameObj.sprite.rotation %= TwoPi;
+	}
+	
+	function AimGun(GameObj, direction, ToWhat) 
+	{
+		
+//		if (GameObj.Gun.isBusy) {
+//			return;
+//		}
+		
+		{
+			var XDelta = ToWhat.position.x - GameObj.position.x;
+			var YDelta = - (ToWhat.position.y - GameObj.position.y);
+			
+	//		console.log("Aiming AimGun..." + direction + " " + ToWhat.name);
+			
+	//		console.log(XDelta + ',' + YDelta);
+			
+			var alpha = Math.atan(YDelta/XDelta);
+			
+			alpha -= TwoPi/4;
+			
+			if (XDelta<0)
+				alpha += TwoPi/2;
+				
+			var CurRotation = GameObj.sprite.Gun.rotation;
+			var NewRotation = ((TwoPi - alpha) - GameObj.sprite.rotation) % TwoPi;
+			var RotationDelta = 0;
+			
+			if (CurRotation<0)
+				CurRotation += TwoPi;
+			if (NewRotation<0)
+				NewRotation += TwoPi;
+				
+			if (Math.abs(NewRotation-CurRotation) <= Math.PI) {
+				if (NewRotation>CurRotation)
+					RotationDelta = 0.013;
+				else
+					RotationDelta = -0.013;
+			} else {
+				if (NewRotation>CurRotation)
+					RotationDelta = -0.013;
+				else
+					RotationDelta = 0.013;
+			}
+			
+			GameObj.sprite.Gun.rotation += RotationDelta;
+			
+//			GameObj.Gun.isBusy = true;
+//			GameObj.Gun.BusyCycles = 20;
+//			GameObj.Gun.AutoRotation = -0.003;
+		}
+	}
+	
+	
+	function ComputeRealDistance(p1, p2)
+	{
+		var diffx = (p1.x-p2.x);
+		var diffy = (p1.y-p2.y);
+		
+		return Math.sqrt(diffx * diffx + diffy * diffy);
+	}
+
+
+	function IsWithinRange(GameObj, ToWhat, threshold)
+	{
+		var ObjectPos = ToWhat.position;
+		var GamePos = GameObj.position;
+		
+		var X = (ObjectPos.x - GamePos.x);
+		var X2 = X * X;
+		var Y = (ObjectPos.y - GamePos.y);
+		var Y2 = Y * Y;
+		
+		var Dist2 = X2 + Y2;
+
+		switch (threshold) {
+			case 'near' :
+				return Dist2 <= (app.screen.width/6.) * (app.screen.width/6.);
+			break;
+		}
+		return Dist2 <= (app.screen.width/2.) * (app.screen.width/2.);
+	}
+
+
+	function Move(GameObj, How, Speed)
+	{
+		var Deltas = GetXYVelocityFromDirection(GameObj.sprite.rotation)
+		
+		GameObj.isBusy = true;
+		GameObj.BusyMoveCycles = 20;
+
+		switch (Speed) {
+			case 'slow' :
+				Deltas.x /= 2;
+				Deltas.y /= 2;
+				break;
+			case 'fast' :
+				Deltas.x *= 1.5;
+				Deltas.y *= 1.5;
+				break;
+		}
+		
+		switch (How) {
+			case 'backwards' :
+				Deltas.x = - Deltas.x;
+				Deltas.y = - Deltas.y;
+				break;
+		}
+			
+		GameObj.AutoMove = {Velx : Deltas.x, Vely : Deltas.y};		
+	}
+
+	
+	function FireGun(GameObj, WeaponToUse)
+	{
+		if (gStopGame) return;
+		
+		
+		if (GameObj.weaponLookup[WeaponToUse].isBusy) {
+			GameObj.weaponLookup[WeaponToUse].BusyCycles--;
+			
+			if (!GameObj.weaponLookup[WeaponToUse].BusyCycles)
+				GameObj.weaponLookup[WeaponToUse].isBusy = false;
+			return;
+		}
+
+
+//		console.log("Firing Gun...:" + WeaponToUse);
+
+		{
+			var diamond = SpriteFromTexture('assets/diamond.png');
+			var WeaponLaunchMultiplier = GameObj.weaponLookup[WeaponToUse].WeaponLaunchMultiplier;
+			
+			diamond.anchor.set(0.5);
+			diamond.x = GameObj.position.x;
+			diamond.y = GameObj.position.y;
+			diamond.scale.x = 0.5
+			diamond.scale.y = 0.5
+			
+			
+//			var Deltas = GetXYVelocityFromDirection(GameObj.rotation-GameObj.weaponLookup[WeaponToUse].rotation); //GameObj.weaponLookup[WeaponToUse].rotation
+			var Deltas;
+			var R1 = GameObj.sprite.rotation;
+			var R2 = GameObj.weaponLookup[WeaponToUse].rotation;
+			
+			
+//			console.log((R1 + R2) % TwoPi);
+//			if (WeaponToUse=='minigun') 
+				Deltas = GetXYVelocityFromDirection((R1 + R2) % TwoPi);
+//			else
+//				Deltas = GetXYVelocityFromDirection(GameObj.rotation + GameObj.weaponLookup[WeaponToUse].rotation)
+			
+//			console.log("OBJ" + R1);
+//			console.log(R2);
+//			console.log((R1 + R2)%TwoPi);
+			
+//			console.log(GameObj.weaponLookup[WeaponToUse].rotation);
+
+//			if (Math.abs(Deltas.x)<.03 && Math.abs(Deltas.y)<.03) return;
+
+			GameObj.weaponLookup[WeaponToUse].isBusy = true;
+			GameObj.weaponLookup[WeaponToUse].BusyCycles = 100;
+
+			diamond.Velx = Deltas.x*3;
+			diamond.Vely = Deltas.y*3;
+			
+			diamond.position.x += diamond.Velx * WeaponLaunchMultiplier;
+			diamond.position.y += diamond.Vely * WeaponLaunchMultiplier;
+
+//			diamond.position.x += diamond.Velx * 27;
+//			diamond.position.y += diamond.Vely * 27;
+			
+			diamond.life = 400;
+			diamond.alphaChange = -0.002;
+			
+			diamond.name= 'diamond'
+			diamond.radius = 16/2;
+
+			IntroduceAmmo(diamond);
+		}
+	}
+
+
+	function IntroduceAmmo(ammo)
+	{
+		app.stage.addChild(ammo);
+		
+		AmmoList.push(ammo);
+	}
+
+
+//--------------------------------------------------------------------------------------------------------------------
+
+var cursor_x = -1;
+var cursor_y = -1;
+
+document.onmousemove = function(event)
+{
+	cursor_x = event.pageX;
+	cursor_y = event.pageY;
+}
+
+document.onclick = function (event)
+{
+	gTrackingSpotlight = (document.body.style.cursor!='none');
+	
+	document.body.style.cursor = (gTrackingSpotlight) ? 'none' : 'default';
+
+	if (bFirstTime) {
+		bFirstTime = false;
+		GameSndManager.play('AirplaneEngine', {volume:5});
+	}
+	
+}
+
+function GetMouse()
+{
+    return { X : cursor_x, Y: cursor_y};
+}
+
+//--------------------------------------------------------------------------------------------------------------------
+	
+	var geval = eval;
+	
+	
+	function Evaluate()
+	{
+		var Code = document.getElementById("ProcessedCode").innerHTML;
+		var funcs = new Array();
+		
+		console.clear();
+
+		geval(Code);
+		
+		for (var i = 0; i< SpriteContainers.length; i++) 
+			funcs.push("Player_Sprite_" + i + "(SpriteContainers[" + i + "])");
+		
+		geval(funcs.join(), ";");		
+	}
+
+	</script>
+
+		<div id="EditorId">
+				<textarea rows=13 cols=60 style="margin-left:10px;padding:15px;font-size:10px; line-height:10px; position:absolute; left:3vw; top:70vh; width:23vw; height:15vh" id="RawCode">Main:
+	if (obj=Sensor('closest', 'enemy')) {
+		AimTank('towards', obj);
+	}
+	if (obj=Sensor('closest', 'incoming ammo')) {
+		AimGun('towards', obj);
+		
+		if (IsWithinRange(obj, "near")) {
+			FireGun('cannon');
+			Move('backwards', 'slow')
+		}
+	}
+				</textarea>
+				<button style="position:relative; top:20vh" onclick="ProcessCode(1)">Update</button>
+			<span id="ProcessedCodeArea" style="display:;  position:absolute; left:30vw; top:70vh">
+				<textarea rows=17 cols=120 style="margin-left:10px;padding:5px;font-size:9.5px;line-height:9px" id="ProcessedCode">
+				</textarea>
+				<button style="position:relative; top:-10px" onclick="Evaluate()">Eval</button>
+			</span>
+		</div>
+		<button style="" onclick="stop()">Stop</button><br>
+		<button style="" onclick="stats()">Stats</button><br>
+		<button style="" onclick="go()">Go</button><br>
+		
+	</body>
+</html>
